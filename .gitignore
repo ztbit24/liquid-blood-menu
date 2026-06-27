@@ -1,0 +1,17 @@
+# Rendszerfájlok
+.DS_Store
+Thumbs.db
+
+# Szerkesztő- és IDE-beállítások
+.idea/
+.vscode/
+
+# Függőségek és build kimenetek, ha később bekerülnének
+node_modules/
+dist/
+build/
+
+# Logok és ideiglenes fájlok
+*.log
+*.tmp
+*.temp

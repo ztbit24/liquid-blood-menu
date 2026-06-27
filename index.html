@@ -3,15 +3,38 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
     <title>Vércsepp menü</title>
+
     <link rel="stylesheet" href="style.css" />
   </head>
+
   <body>
     <main class="demo-stage" aria-label="Vércsepp menü demo">
+      <button
+        id="menuOverlay"
+        class="menu-overlay"
+        type="button"
+        aria-label="Menü bezárása"
+        hidden
+      ></button>
+
+      <!--
+        A teljes menü SVG-ben rajzolódik, hogy a gooey filter és a
+        folyékony alakzatok egy rétegen belül tudjanak összeolvadni.
+      -->
       <svg id="menuSvg" class="blood-menu" aria-hidden="true">
         <defs>
-          <filter id="bloodGoo" x="-25%" y="-25%" width="150%" height="170%" color-interpolation-filters="sRGB">
+          <filter
+            id="bloodGoo"
+            x="-25%"
+            y="-25%"
+            width="150%"
+            height="170%"
+            color-interpolation-filters="sRGB"
+          >
             <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur" />
+
             <feColorMatrix
               in="blur"
               mode="matrix"
@@ -22,27 +45,33 @@
                 0 0 0 20 -8"
               result="goo"
             />
+
             <feComposite in="SourceGraphic" in2="goo" operator="atop" />
           </filter>
         </defs>
 
         <g id="bloodLayer" class="blood-layer">
+          <!-- Nyitás közben megjelenő fő csepp és összekötő híd. -->
           <path id="dropShape" class="blood-shape blood-drop" />
           <path id="bridgeShape" class="blood-shape blood-bridge" />
 
+          <!-- Menüelemek, amelyek a fő gombból válnak szét. -->
           <g id="itemsGroup">
             <g class="menu-item" data-index="0">
               <path class="blood-shape item-shape" />
               <text class="item-label">Élet</text>
             </g>
+
             <g class="menu-item" data-index="1">
               <path class="blood-shape item-shape" />
               <text class="item-label">Remény</text>
             </g>
+
             <g class="menu-item" data-index="2">
               <path class="blood-shape item-shape" />
               <text class="item-label">Erő</text>
             </g>
+
             <g class="menu-item" data-index="3">
               <path class="blood-shape item-shape" />
               <text class="item-label">Segítség</text>
@@ -51,10 +80,19 @@
 
           <path id="buttonShape" class="blood-shape main-shape" />
         </g>
+
         <text id="buttonText" class="button-label">Adj vért</text>
       </svg>
 
-      <button id="hitButton" class="hit-button" type="button" aria-label="Vércsepp menü nyitása">Adj vért</button>
+      <!-- Láthatatlan, natív fókuszt és pointer húzást kezelő gomb. -->
+      <button
+        id="hitButton"
+        class="hit-button"
+        type="button"
+        aria-label="Vércsepp menü nyitása"
+      >
+        Adj vért
+      </button>
     </main>
 
     <script src="script.js"></script>

@@ -1,4 +1,6 @@
+// 1. DOM elemek
 const svg = document.querySelector("#menuSvg");
+const menuOverlay = document.querySelector("#menuOverlay");
 const hitButton = document.querySelector("#hitButton");
 const buttonShape = document.querySelector("#buttonShape");
 const buttonText = document.querySelector("#buttonText");
@@ -6,15 +8,40 @@ const dropShape = document.querySelector("#dropShape");
 const bridgeShape = document.querySelector("#bridgeShape");
 const itemGroups = [...document.querySelectorAll(".menu-item")];
 
+// 2. Állapot
+const MODES = {
+  IDLE: "idle",
+  DRAGGING: "dragging",
+  SNAP_BACK: "snapBack",
+  DETACHING: "detaching",
+  OPEN: "open",
+  CLOSING: "closing",
+};
+
+const DRAG_OPEN_THRESHOLD = 96;
+const DRAG_MAX_DISTANCE = 190;
+
 const state = {
+  mode: MODES.IDLE,
   width: window.innerWidth,
   height: window.innerHeight,
-  open: false,
-  animating: false,
   startTime: performance.now(),
-  button: { cx: 0, cy: 0, w: 260, h: 92 },
+  button: {
+    cx: 0,
+    cy: 0,
+    w: 260,
+    h: 92,
+  },
   progress: 0,
   impulse: 0,
+  pointer: {
+    id: null,
+    startX: 0,
+    startY: 0,
+    currentX: 0,
+    currentY: 0,
+  },
+  animationFrame: null,
 };
 
 const items = [
@@ -24,10 +51,59 @@ const items = [
   { label: "Segítség", dx: 124, dy: 218, w: 154, h: 56 },
 ];
 
+// 3. Segédfüggvények
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 const lerp = (a, b, t) => a + (b - a) * t;
 const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
-const easeInOutCubic = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const easeInOutCubic = (t) =>
+  t < 0.5
+    ? 4 * t * t * t
+    : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+function isMode(...modes) {
+  return modes.includes(state.mode);
+}
+
+function setMode(mode) {
+  state.mode = mode;
+  hitButton.setAttribute(
+    "aria-expanded",
+    String(isMode(MODES.DETACHING, MODES.OPEN))
+  );
+  syncOverlay();
+}
+
+function resetPointer() {
+  state.pointer.id = null;
+  state.pointer.startX = 0;
+  state.pointer.startY = 0;
+  state.pointer.currentX = 0;
+  state.pointer.currentY = 0;
+}
+
+function dragDistanceFromEvent(event) {
+  const deltaY = event.clientY - state.pointer.startY;
+  return Math.max(0, deltaY);
+}
+
+function progressFromDrag(distance) {
+  return clamp(distance / DRAG_MAX_DISTANCE, 0, 0.72);
+}
+
+function syncOverlay() {
+  const shouldShow = isMode(MODES.DETACHING, MODES.OPEN, MODES.CLOSING);
+
+  if (shouldShow) {
+    menuOverlay.hidden = false;
+    requestAnimationFrame(() => {
+      menuOverlay.classList.add("is-visible");
+    });
+    return;
+  }
+
+  menuOverlay.classList.remove("is-visible");
+  menuOverlay.hidden = true;
+}
 
 function catmullRomPath(points) {
   let d = `M ${points[0].x} ${points[0].y}`;
@@ -38,15 +114,35 @@ function catmullRomPath(points) {
     const p1 = points[i];
     const p2 = points[(i + 1) % size];
     const p3 = points[(i + 2) % size];
-    const c1 = { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 };
-    const c2 = { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 };
+
+    const c1 = {
+      x: p1.x + (p2.x - p0.x) / 6,
+      y: p1.y + (p2.y - p0.y) / 6,
+    };
+
+    const c2 = {
+      x: p2.x - (p3.x - p1.x) / 6,
+      y: p2.y - (p3.y - p1.y) / 6,
+    };
+
     d += ` C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${p2.x} ${p2.y}`;
   }
 
   return `${d} Z`;
 }
 
-function wavySuperellipse({ cx, cy, w, h, amp, phase, seed = 0, points = 56, power = 4 }) {
+// 4. Alakzat-generátorok
+function wavySuperellipse({
+  cx,
+  cy,
+  w,
+  h,
+  amp,
+  phase,
+  seed = 0,
+  points = 56,
+  power = 4,
+}) {
   const result = [];
   const a = w / 2;
   const b = h / 2;
@@ -83,6 +179,7 @@ function dropPath(cx, cy, size, amp, phase) {
     const y = Math.sin(theta) * ry - topPull;
     const wave = Math.sin(theta * 6 + phase) * amp;
     const len = Math.hypot(x / rx, y / ry) || 1;
+
     points.push({
       x: cx + x + (x / rx / len) * wave,
       y: cy + y + (y / ry / len) * wave,
@@ -101,6 +198,7 @@ function bridgePath(cx, topY, bottomY, topWidth, bottomWidth, amp, phase) {
   const waist = Math.max(10, Math.min(topWidth, bottomWidth) * 0.5);
   const pinchY = topY + height * 0.58;
   const wobble = Math.sin(phase * 1.4) * amp;
+
   const leftTop = { x: cx - topWidth / 2, y: topY };
   const rightTop = { x: cx + topWidth / 2, y: topY };
   const leftBottom = { x: cx - bottomWidth / 2, y: bottomY };
@@ -109,80 +207,90 @@ function bridgePath(cx, topY, bottomY, topWidth, bottomWidth, amp, phase) {
   const rightPinch = { x: cx + waist / 2 + wobble, y: pinchY };
 
   return [
-    "M", leftTop.x, leftTop.y,
-    "C", cx - topWidth * 0.56, topY + height * 0.24, leftPinch.x, pinchY - height * 0.18, leftPinch.x, leftPinch.y,
-    "C", leftPinch.x, pinchY + height * 0.2, leftBottom.x, bottomY - height * 0.28, leftBottom.x, leftBottom.y,
-    "C", cx - bottomWidth * 0.18, bottomY + height * 0.08, cx + bottomWidth * 0.18, bottomY + height * 0.08, rightBottom.x, rightBottom.y,
-    "C", rightBottom.x, bottomY - height * 0.28, rightPinch.x, pinchY + height * 0.2, rightPinch.x, rightPinch.y,
-    "C", rightPinch.x, pinchY - height * 0.18, cx + topWidth * 0.56, topY + height * 0.24, rightTop.x, rightTop.y,
+    "M",
+    leftTop.x,
+    leftTop.y,
+    "C",
+    cx - topWidth * 0.56,
+    topY + height * 0.24,
+    leftPinch.x,
+    pinchY - height * 0.18,
+    leftPinch.x,
+    leftPinch.y,
+    "C",
+    leftPinch.x,
+    pinchY + height * 0.2,
+    leftBottom.x,
+    bottomY - height * 0.28,
+    leftBottom.x,
+    leftBottom.y,
+    "C",
+    cx - bottomWidth * 0.18,
+    bottomY + height * 0.08,
+    cx + bottomWidth * 0.18,
+    bottomY + height * 0.08,
+    rightBottom.x,
+    rightBottom.y,
+    "C",
+    rightBottom.x,
+    bottomY - height * 0.28,
+    rightPinch.x,
+    pinchY + height * 0.2,
+    rightPinch.x,
+    rightPinch.y,
+    "C",
+    rightPinch.x,
+    pinchY - height * 0.18,
+    cx + topWidth * 0.56,
+    topY + height * 0.24,
+    rightTop.x,
+    rightTop.y,
     "Z",
   ].join(" ");
 }
 
+// 5. Render
 function resize() {
   state.width = window.innerWidth;
   state.height = window.innerHeight;
+
   svg.setAttribute("viewBox", `0 0 ${state.width} ${state.height}`);
+
   state.button.cx = state.width / 2;
   state.button.cy = state.height / 2;
   state.button.w = Math.min(276, state.width * 0.72);
   state.button.h = 92;
+
   render(performance.now());
-}
-
-function animateTo(targetOpen) {
-  if (state.animating) {
-    return;
-  }
-
-  const from = state.progress;
-  const to = targetOpen ? 1 : 0;
-  const started = performance.now();
-  const duration = targetOpen ? 760 : 440;
-  state.animating = true;
-  state.open = targetOpen;
-  state.impulse = 20;
-
-  function tick(now) {
-    const t = clamp((now - started) / duration, 0, 1);
-    const eased = targetOpen ? easeOutCubic(t) : easeInOutCubic(t);
-    state.progress = lerp(from, to, eased);
-    state.impulse *= 0.92;
-    render(now);
-
-    if (t < 1) {
-      requestAnimationFrame(tick);
-      return;
-    }
-
-    state.progress = to;
-    state.animating = false;
-    render(performance.now());
-  }
-
-  requestAnimationFrame(tick);
 }
 
 function render(now) {
   const phase = (now - state.startTime) / 180;
   const p = state.progress;
-  const buttonPulse = state.animating ? state.impulse : 2.4 + Math.sin(phase * 0.7) * 1.2;
+  const isTransitioning = isMode(MODES.SNAP_BACK, MODES.DETACHING, MODES.CLOSING);
+  const buttonPulse = isTransitioning
+    ? state.impulse
+    : 2.4 + Math.sin(phase * 0.7) * 1.2;
   const buttonAmp = buttonPulse * (1 - p * 0.45);
   const dropP = clamp(p / 0.46, 0, 1);
   const splitP = clamp((p - 0.58) / 0.42, 0, 1);
   const cx = state.button.cx;
   const cy = state.button.cy;
 
-  buttonShape.setAttribute("d", wavySuperellipse({
-    cx,
-    cy,
-    w: state.button.w - splitP * 18,
-    h: state.button.h - splitP * 8,
-    amp: buttonAmp,
-    phase,
-    seed: 0.4,
-    power: 4.2,
-  }));
+  buttonShape.setAttribute(
+    "d",
+    wavySuperellipse({
+      cx,
+      cy,
+      w: state.button.w - splitP * 18,
+      h: state.button.h - splitP * 8,
+      amp: buttonAmp,
+      phase,
+      seed: 0.4,
+      power: 4.2,
+    })
+  );
+
   buttonText.setAttribute("x", cx);
   buttonText.setAttribute("y", cy + 1);
   buttonText.style.opacity = String(1 - splitP * 0.82);
@@ -195,9 +303,27 @@ function render(now) {
   const tearP = clamp((p - 0.6) / 0.18, 0, 1);
   const topWidth = lerp(state.button.w * 0.42, 42, bridgeP) * (1 - tearP * 0.72);
   const bottomWidth = lerp(12, dropSize * 0.55, dropP) * (1 - tearP * 0.84);
-  dropShape.setAttribute("d", dropSize > 2 ? dropPath(cx, dropY, dropSize, 4 + state.impulse * 0.16, phase * 1.2) : "");
+
+  dropShape.setAttribute(
+    "d",
+    dropSize > 2
+      ? dropPath(cx, dropY, dropSize, 4 + state.impulse * 0.16, phase * 1.2)
+      : ""
+  );
   dropShape.style.opacity = String(clamp(dropP * 1.4 - splitP * 0.7, 0, 1));
-  bridgeShape.setAttribute("d", bridgePath(cx, buttonBottom, dropTop + 6, topWidth, bottomWidth, 5 + state.impulse * 0.06, phase));
+
+  bridgeShape.setAttribute(
+    "d",
+    bridgePath(
+      cx,
+      buttonBottom,
+      dropTop + 6,
+      topWidth,
+      bottomWidth,
+      5 + state.impulse * 0.06,
+      phase
+    )
+  );
   bridgeShape.style.opacity = String(clamp(bridgeP * 1.3 - tearP * 1.25, 0, 1));
 
   itemGroups.forEach((group, index) => {
@@ -212,34 +338,207 @@ function render(now) {
     const shape = group.querySelector(".item-shape");
     const text = group.querySelector(".item-label");
 
-    shape.setAttribute("d", wavySuperellipse({
-      cx: itemCx,
-      cy: itemCy,
-      w: itemW,
-      h: itemH,
-      amp,
-      phase: phase * 1.15,
-      seed: index * 1.7,
-      power: 3.7,
-    }));
+    shape.setAttribute(
+      "d",
+      wavySuperellipse({
+        cx: itemCx,
+        cy: itemCy,
+        w: itemW,
+        h: itemH,
+        amp,
+        phase: phase * 1.15,
+        seed: index * 1.7,
+        power: 3.7,
+      })
+    );
+
     text.setAttribute("x", itemCx);
     text.setAttribute("y", itemCy + 1);
     group.style.opacity = String(eased);
   });
 }
 
-hitButton.addEventListener("click", () => {
-  animateTo(!state.open);
-});
+// 6. Animáció
+function animateProgress({ mode, from, to, duration, easing, doneMode }) {
+  if (!isMode(mode)) {
+    return;
+  }
 
-window.addEventListener("resize", resize);
+  const started = performance.now();
+  state.impulse = 20;
+
+  function tick(now) {
+    if (!isMode(mode)) {
+      return;
+    }
+
+    const t = clamp((now - started) / duration, 0, 1);
+    const eased = easing(t);
+
+    state.progress = lerp(from, to, eased);
+    state.impulse *= 0.92;
+
+    render(now);
+
+    if (t < 1) {
+      state.animationFrame = requestAnimationFrame(tick);
+      return;
+    }
+
+    state.progress = to;
+    state.animationFrame = null;
+    setMode(doneMode);
+    render(performance.now());
+  }
+
+  state.animationFrame = requestAnimationFrame(tick);
+}
+
+function snapBack() {
+  setMode(MODES.SNAP_BACK);
+  animateProgress({
+    mode: MODES.SNAP_BACK,
+    from: state.progress,
+    to: 0,
+    duration: 260,
+    easing: easeInOutCubic,
+    doneMode: MODES.IDLE,
+  });
+}
+
+function detachOpen() {
+  setMode(MODES.DETACHING);
+  animateProgress({
+    mode: MODES.DETACHING,
+    from: state.progress,
+    to: 1,
+    duration: 620,
+    easing: easeOutCubic,
+    doneMode: MODES.OPEN,
+  });
+}
+
+function closeMenu() {
+  if (!isMode(MODES.OPEN)) {
+    return;
+  }
+
+  setMode(MODES.CLOSING);
+  animateProgress({
+    mode: MODES.CLOSING,
+    from: state.progress,
+    to: 0,
+    duration: 440,
+    easing: easeInOutCubic,
+    doneMode: MODES.IDLE,
+  });
+}
 
 function idle(now) {
-  if (!state.animating) {
+  if (isMode(MODES.IDLE, MODES.DRAGGING, MODES.OPEN)) {
     render(now);
   }
+
   requestAnimationFrame(idle);
 }
 
+// 7. Eseménykezelők
+function handlePointerDown(event) {
+  if (!isMode(MODES.IDLE)) {
+    return;
+  }
+
+  event.preventDefault();
+
+  setMode(MODES.DRAGGING);
+  state.pointer.id = event.pointerId;
+  state.pointer.startX = event.clientX;
+  state.pointer.startY = event.clientY;
+  state.pointer.currentX = event.clientX;
+  state.pointer.currentY = event.clientY;
+  state.progress = 0;
+  state.impulse = 10;
+
+  hitButton.setPointerCapture(event.pointerId);
+  render(performance.now());
+}
+
+function handlePointerMove(event) {
+  if (!isMode(MODES.DRAGGING) || event.pointerId !== state.pointer.id) {
+    return;
+  }
+
+  event.preventDefault();
+
+  state.pointer.currentX = event.clientX;
+  state.pointer.currentY = event.clientY;
+  state.progress = progressFromDrag(dragDistanceFromEvent(event));
+  state.impulse = 8 + state.progress * 16;
+
+  render(performance.now());
+}
+
+function handlePointerUp(event) {
+  if (!isMode(MODES.DRAGGING) || event.pointerId !== state.pointer.id) {
+    return;
+  }
+
+  event.preventDefault();
+
+  const distance = dragDistanceFromEvent(event);
+
+  if (hitButton.hasPointerCapture(event.pointerId)) {
+    hitButton.releasePointerCapture(event.pointerId);
+  }
+
+  resetPointer();
+
+  if (distance >= DRAG_OPEN_THRESHOLD) {
+    detachOpen();
+    return;
+  }
+
+  snapBack();
+}
+
+function handlePointerCancel(event) {
+  if (!isMode(MODES.DRAGGING) || event.pointerId !== state.pointer.id) {
+    return;
+  }
+
+  if (hitButton.hasPointerCapture(event.pointerId)) {
+    hitButton.releasePointerCapture(event.pointerId);
+  }
+
+  resetPointer();
+  snapBack();
+}
+
+function handleOverlayClick() {
+  if (!isMode(MODES.OPEN)) {
+    return;
+  }
+
+  closeMenu();
+}
+
+function handleKeyDown(event) {
+  if (event.key !== "Escape" || !isMode(MODES.OPEN)) {
+    return;
+  }
+
+  event.preventDefault();
+  closeMenu();
+}
+
+hitButton.addEventListener("pointerdown", handlePointerDown);
+hitButton.addEventListener("pointermove", handlePointerMove);
+hitButton.addEventListener("pointerup", handlePointerUp);
+hitButton.addEventListener("pointercancel", handlePointerCancel);
+menuOverlay.addEventListener("click", handleOverlayClick);
+window.addEventListener("keydown", handleKeyDown);
+window.addEventListener("resize", resize);
+
+hitButton.setAttribute("aria-expanded", "false");
 resize();
 requestAnimationFrame(idle);

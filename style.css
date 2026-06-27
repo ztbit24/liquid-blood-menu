@@ -1,3 +1,4 @@
+/* Alapszínek és globális beállítások. */
 :root {
   --bg: #12050a;
   --red: #d90f2f;
@@ -8,6 +9,7 @@
 
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html,
@@ -17,7 +19,13 @@ body {
   margin: 0;
   overflow: hidden;
   color: var(--white);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
   background: var(--bg);
 }
 
@@ -25,11 +33,15 @@ body {
   min-height: 100svh;
 }
 
+/* Teljes képernyős demo háttér. */
 .demo-stage {
   position: relative;
   width: 100vw;
   height: 100svh;
   overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  touch-action: none;
   background:
     radial-gradient(circle at 50% 40%, rgba(218, 17, 47, 0.16), transparent 28%),
     radial-gradient(circle at 18% 18%, rgba(255, 107, 127, 0.14), transparent 24%),
@@ -48,17 +60,53 @@ body {
   pointer-events: none;
 }
 
-.blood-menu {
+/* Nyitott menü alatti, háttérkattintást kezelő réteg. */
+.menu-overlay {
   position: fixed;
   inset: 0;
   z-index: 1;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  padding: 0;
+  background: rgba(8, 2, 5, 0.42);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.menu-overlay.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.menu-overlay[hidden] {
+  display: none;
+}
+
+/* SVG rétegek és folyékony vér alakzatok. */
+.blood-menu {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
   width: 100vw;
   height: 100svh;
   overflow: visible;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  touch-action: none;
+  pointer-events: none;
 }
 
 .blood-layer {
   filter: url("#bloodGoo");
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  touch-action: none;
 }
 
 .blood-shape {
@@ -69,6 +117,9 @@ body {
   stroke-linecap: round;
   filter: drop-shadow(0 18px 28px rgba(82, 0, 12, 0.32));
   vector-effect: non-scaling-stroke;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  touch-action: none;
 }
 
 .main-shape {
@@ -86,8 +137,12 @@ body {
   opacity: 0;
 }
 
+/* Menüelemek és feliratok. */
 .menu-item {
   opacity: 0;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  touch-action: none;
 }
 
 .item-shape {
@@ -102,6 +157,8 @@ body {
   dominant-baseline: middle;
   pointer-events: none;
   letter-spacing: 0;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
 
 .button-label {
@@ -112,11 +169,12 @@ body {
   font-size: clamp(15px, 2.2vw, 21px);
 }
 
+/* Láthatatlan kattintási felület a középső SVG-gomb felett. */
 .hit-button {
   position: fixed;
   left: 50%;
   top: 50%;
-  z-index: 2;
+  z-index: 3;
   width: min(270px, 72vw);
   height: 92px;
   border: 0;
@@ -125,7 +183,9 @@ body {
   color: transparent;
   cursor: pointer;
   transform: translate(-50%, -50%);
-  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  touch-action: none;
 }
 
 .hit-button:focus-visible {

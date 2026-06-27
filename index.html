@@ -70,7 +70,27 @@
 
             <feComposite in="SourceGraphic" in2="goo" operator="atop" />
           </filter>
+
+          <filter id="vascularGlow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="softGlow" />
+            <feColorMatrix
+              in="softGlow"
+              mode="matrix"
+              values="
+                1 0 0 0 0.55
+                0 1 0 0 0
+                0 0 1 0 0.08
+                0 0 0 0.9 0"
+              result="redGlow"
+            />
+            <feMerge>
+              <feMergeNode in="redGlow" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
         </defs>
+
+        <g id="vascularLayer" class="vascular-layer"></g>
 
         <g id="bloodLayer" class="blood-layer">
           <!-- Nyitás közben megjelenő fő csepp és összekötő híd. -->

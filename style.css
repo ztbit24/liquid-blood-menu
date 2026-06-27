@@ -291,6 +291,93 @@ body {
   pointer-events: none;
 }
 
+.vascular-layer {
+  pointer-events: none;
+  filter: url("#vascularGlow");
+  opacity: 0;
+  transition: opacity 260ms ease;
+}
+
+.vascular-layer.is-visible {
+  opacity: 1;
+}
+
+.vascular-path,
+.vascular-pulse {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.vascular-path {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: vascular-breath 2600ms ease-in-out infinite;
+}
+
+.vascular-main-path--outer {
+  stroke: rgba(72, 2, 15, 0.82);
+  opacity: 0.68;
+}
+
+.vascular-main-path--inner {
+  stroke: rgba(255, 88, 106, 0.48);
+  opacity: 0.5;
+}
+
+.vascular-branch-path--outer {
+  stroke: rgba(72, 2, 15, 0.54);
+  opacity: 0.46;
+}
+
+.vascular-branch-path--inner {
+  stroke: rgba(255, 88, 106, 0.32);
+  opacity: 0.38;
+}
+
+.vascular-main-path,
+.vascular-branch-path {
+  transition:
+    opacity 220ms ease,
+    stroke-width 220ms ease;
+}
+
+.vascular-pulse {
+  stroke: rgba(255, 174, 184, 0.88);
+  stroke-width: 5.2;
+  opacity: 0;
+  filter: drop-shadow(0 0 10px rgba(255, 91, 112, 0.42));
+}
+
+.vascular-layer.has-highlight .vascular-group {
+  opacity: 0.32;
+}
+
+.vascular-layer.has-highlight .vascular-group.is-active {
+  opacity: 1;
+}
+
+.vascular-group.is-active .vascular-main-path--outer {
+  opacity: 0.82;
+}
+
+.vascular-group.is-active .vascular-main-path--inner {
+  opacity: 0.72;
+}
+
+.vascular-group.is-active .vascular-pulse.is-running {
+  opacity: 0.95;
+  animation: vascular-pulse-run 980ms ease-out 1;
+}
+
+.vascular-group.pulse-arrived .vascular-main-path {
+  animation:
+    vascular-breath 2600ms ease-in-out infinite,
+    vascular-arrival-pulse 360ms ease-out 1;
+}
+
 .blood-layer {
   filter: url("#bloodGoo");
   -webkit-tap-highlight-color: transparent;
@@ -425,5 +512,37 @@ body {
   50% {
     opacity: 0.82;
     transform: translateY(5px);
+  }
+}
+
+@keyframes vascular-breath {
+  0%,
+  100% {
+    transform: scale(var(--vascular-pulse-scale, 1));
+  }
+
+  50% {
+    transform: scale(calc(var(--vascular-pulse-scale, 1) * 1.012));
+  }
+}
+
+@keyframes vascular-pulse-run {
+  from {
+    stroke-dashoffset: var(--pulse-length, 280);
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes vascular-arrival-pulse {
+  0%,
+  100% {
+    opacity: 0.68;
+  }
+
+  45% {
+    opacity: 1;
   }
 }

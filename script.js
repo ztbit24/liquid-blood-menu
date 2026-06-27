@@ -6,6 +6,7 @@ const consoleModule = document.querySelector("#consoleModule");
 const consoleOutput = document.querySelector("#consoleOutput");
 const dragHint = document.querySelector("#dragHint");
 const hitButton = document.querySelector("#hitButton");
+const vascularLayer = document.querySelector("#vascularLayer");
 const buttonShape = document.querySelector("#buttonShape");
 const buttonText = document.querySelector("#buttonText");
 const dropShape = document.querySelector("#dropShape");
@@ -26,6 +27,8 @@ const DRAG_OPEN_THRESHOLD = 96;
 const DRAG_MAX_DISTANCE = 190;
 const CLOSED_LABEL = "BIO INTERFACE";
 const DRAGGED_LABEL = "INITIALIZE";
+const RESIZE_DEBOUNCE_MS = 140;
+let resizeTimer = null;
 
 const state = {
   mode: MODES.IDLE,
@@ -162,7 +165,12 @@ function setMode(mode) {
   }
 
   if (mode === MODES.OPEN) {
-    showConsole(state.console.activeIndex);
+    veinNetwork.generate();
+    veinNetwork.grow();
+  }
+
+  if (mode === MODES.CLOSING) {
+    veinNetwork.clear();
   }
 
   if (mode === MODES.CLOSING || mode === MODES.IDLE) {
@@ -194,6 +202,15 @@ function progressFromDrag(distance) {
   return clamp(distance / DRAG_MAX_DISTANCE, 0, 0.72);
 }
 
+function seededRandom(seed) {
+  const x = Math.sin(seed * 12.9898 + 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+function seededRange(seed, min, max) {
+  return lerp(min, max, seededRandom(seed));
+}
+
 function topButtonCenterY() {
   return Math.min(Math.max(92, state.height * 0.16), 132);
 }
@@ -206,6 +223,397 @@ function syncHitTarget() {
   dragHint.style.left = `${state.button.cx}px`;
   dragHint.style.top = `${state.button.cy + state.button.h * 0.72}px`;
 }
+
+function getOpenDropCenter() {
+  return {
+    x: state.button.cx,
+    y: state.button.cy + state.button.h / 2 + 74,
+  };
+}
+
+function getModuleCenters() {
+  return items.map((item, index) => ({
+    id: item.label,
+    index,
+    x: state.button.cx + item.dx,
+    y: state.button.cy + item.dy,
+  }));
+}
+
+class VeinNetwork {
+  constructor(layer, getStart, getTargets) {
+    this.layer = layer;
+    this.getStart = getStart;
+    this.getTargets = getTargets;
+    this.seed = 1;
+    this.startedAt = 0;
+    this.frame = null;
+    this.clearTimer = null;
+    this.branches = [];
+    this.activeIndex = null;
+    this.pendingConsole = null;
+    this.isGrowing = false;
+    this.generatedAt = 0;
+    this.branchCount = 0;
+    this.generatedPathCount = 0;
+    this.segmentNamespace = "http://www.w3.org/2000/svg";
+  }
+
+  random(seed) {
+    const x = Math.sin(seed * 12.9898 + this.seed * 78.233) * 43758.5453;
+    return x - Math.floor(x);
+  }
+
+  noise(seed, step) {
+    const base = Math.floor(step);
+    const t = step - base;
+    const a = this.random(seed + base * 5.17);
+    const b = this.random(seed + (base + 1) * 5.17);
+    const smooth = t * t * (3 - 2 * t);
+
+    return lerp(a, b, smooth) * 2 - 1;
+  }
+
+  vectorTo(from, to) {
+    return {
+      x: to.x - from.x,
+      y: to.y - from.y,
+    };
+  }
+
+  normalize(vector) {
+    const length = Math.hypot(vector.x, vector.y) || 1;
+
+    return {
+      x: vector.x / length,
+      y: vector.y / length,
+      length,
+    };
+  }
+
+  createPath(parent, className, width = null) {
+    const path = document.createElementNS(this.segmentNamespace, "path");
+
+    path.setAttribute("class", className);
+    path.setAttribute("d", "");
+
+    if (width !== null) {
+      path.setAttribute("stroke-width", width);
+    }
+
+    parent.append(path);
+    this.generatedPathCount += 1;
+
+    return path;
+  }
+
+  generate() {
+    this.isGrowing = false;
+
+    if (this.frame) {
+      cancelAnimationFrame(this.frame);
+      this.frame = null;
+    }
+
+    if (this.clearTimer) {
+      clearTimeout(this.clearTimer);
+      this.clearTimer = null;
+    }
+
+    this.seed = Date.now() % 100000;
+    this.startedAt = performance.now();
+    this.generatedAt = this.startedAt;
+    this.branchCount = 0;
+    this.generatedPathCount = 0;
+    this.layer.style.display = "";
+    this.layer.classList.add("is-visible");
+    this.layer.replaceChildren();
+
+    const start = this.getStart();
+    const targets = this.getTargets();
+    const isMobile = state.width < 640;
+    const maxBranches = isMobile ? 8 + Math.floor(this.random(90) * 5) : 24;
+    let branchBudget = maxBranches;
+
+    this.branches = targets.map((target, index) => {
+      const group = document.createElementNS(this.segmentNamespace, "g");
+      const direction = this.normalize(this.vectorTo(start, target));
+      const mainOuterPath = this.createPath(group, "vascular-path vascular-main-path vascular-main-path--outer");
+      const mainInnerPath = this.createPath(group, "vascular-path vascular-main-path vascular-main-path--inner");
+      const branchOuterPath = this.createPath(group, "vascular-path vascular-branch-path vascular-branch-path--outer");
+      const branchInnerPath = this.createPath(group, "vascular-path vascular-branch-path vascular-branch-path--inner");
+      const pulsePath = this.createPath(group, "vascular-pulse");
+
+      group.setAttribute("class", "vascular-group");
+      group.dataset.index = String(index);
+      this.layer.append(group);
+
+      return {
+        group,
+        index,
+        target,
+        tip: { ...start },
+        points: [{ ...start }],
+        mainD: `M ${start.x} ${start.y}`,
+        branchD: "",
+        mainOuterPath,
+        mainInnerPath,
+        branchOuterPath,
+        branchInnerPath,
+        pulsePath,
+        direction: { x: direction.x, y: direction.y },
+        distance: direction.length,
+        travelled: 0,
+        nextBranchAt: 32 + this.random(index + 11) * 20,
+        branchBudget: Math.floor(branchBudget / (targets.length - index)),
+        step: 5.8 + this.random(index + 33) * 1.4,
+        seed: this.seed + index * 101,
+        delay: 80 + index * (80 + this.random(index + 72) * 60),
+        started: false,
+        complete: false,
+        completedAt: null,
+        pulseCallback: null,
+      };
+
+      branchBudget -= Math.floor(branchBudget / (targets.length - index));
+    });
+  }
+
+  grow() {
+    if (!this.branches.length) {
+      this.generate();
+    }
+
+    this.isGrowing = true;
+    this.layer.classList.add("is-visible");
+    this.startedAt = performance.now();
+    this.tick(performance.now());
+  }
+
+  tick(now) {
+    let hasActiveGrowth = false;
+
+    this.branches.forEach((branch) => {
+      if (now - this.startedAt < branch.delay || branch.complete) {
+        hasActiveGrowth = hasActiveGrowth || !branch.complete;
+        return;
+      }
+
+      branch.started = true;
+      this.growBranch(branch);
+      hasActiveGrowth = true;
+    });
+
+    if (this.isGrowing && hasActiveGrowth) {
+      this.frame = requestAnimationFrame((nextNow) => this.tick(nextNow));
+      return;
+    }
+
+    this.reportMetrics();
+    this.frame = null;
+  }
+
+  growBranch(branch) {
+    const targetVector = this.normalize(this.vectorTo(branch.tip, branch.target));
+    const noiseAngle = this.noise(branch.seed, branch.travelled * 0.045) * 0.92;
+    const noisy = {
+      x: targetVector.x + Math.cos(noiseAngle) * 0.16,
+      y: targetVector.y + Math.sin(noiseAngle) * 0.16,
+    };
+    const blended = this.normalize({
+      x: noisy.x + branch.direction.x * 1.85,
+      y: noisy.y + branch.direction.y * 1.85,
+    });
+    const step = Math.min(branch.step, targetVector.length);
+    const next = {
+      x: branch.tip.x + blended.x * step,
+      y: branch.tip.y + blended.y * step,
+    };
+    const progress = clamp(branch.travelled / Math.max(branch.distance, 1), 0, 1);
+
+    branch.mainD += ` L ${next.x} ${next.y}`;
+    branch.mainOuterPath.setAttribute("d", branch.mainD);
+    branch.mainInnerPath.setAttribute("d", branch.mainD);
+    branch.mainOuterPath.setAttribute("stroke-width", lerp(4, 1.2, progress).toFixed(2));
+    branch.mainInnerPath.setAttribute("stroke-width", lerp(1.7, 0.5, progress).toFixed(2));
+    branch.points.push(next);
+    branch.tip = next;
+    branch.direction = { x: blended.x, y: blended.y };
+    branch.travelled += step;
+
+    if (
+      branch.branchBudget > 0 &&
+      branch.travelled >= branch.nextBranchAt &&
+      this.random(branch.seed + branch.travelled) < 0.22
+    ) {
+      this.createBranch(branch, next, branch.direction, progress);
+      branch.branchBudget -= 1;
+      this.branchCount += 1;
+      branch.nextBranchAt += 30 + this.random(branch.seed + branch.travelled + 2) * 20;
+    }
+
+    if (targetVector.length <= branch.step * 1.5 || branch.travelled > branch.distance * 1.25) {
+      branch.mainD += ` L ${branch.target.x} ${branch.target.y}`;
+      branch.mainOuterPath.setAttribute("d", branch.mainD);
+      branch.mainInnerPath.setAttribute("d", branch.mainD);
+      branch.points.push({ ...branch.target });
+      branch.tip = { ...branch.target };
+      branch.complete = true;
+      branch.completedAt = performance.now();
+      this.createPulsePath(branch);
+
+      if (branch.pulseCallback) {
+        const callback = branch.pulseCallback;
+
+        branch.pulseCallback = null;
+        this.highlight(branch.index, callback);
+      }
+    }
+  }
+
+  createBranch(parentBranch, start, previousDirection, progress) {
+    const side = this.random(parentBranch.seed + parentBranch.travelled + 7) > 0.5 ? 1 : -1;
+    const turn = side * (0.72 + this.random(parentBranch.seed + parentBranch.travelled + 9) * 0.75);
+    let direction = {
+      x: previousDirection.x * Math.cos(turn) - previousDirection.y * Math.sin(turn),
+      y: previousDirection.x * Math.sin(turn) + previousDirection.y * Math.cos(turn),
+    };
+    let tip = { ...start };
+    const segmentCount = 2 + Math.floor(this.random(parentBranch.seed + parentBranch.travelled + 13) * 3);
+    let branchPath = `M ${start.x} ${start.y}`;
+
+    for (let i = 0; i < segmentCount; i += 1) {
+      const noiseAngle = this.noise(parentBranch.seed + i * 13, parentBranch.travelled + i) * 0.7;
+      const length = 9 + this.random(parentBranch.seed + i * 17 + parentBranch.travelled) * 10;
+      const nextDirection = this.normalize({
+        x: direction.x + Math.cos(noiseAngle) * 0.22,
+        y: direction.y + Math.sin(noiseAngle) * 0.22,
+      });
+      const next = {
+        x: tip.x + nextDirection.x * length,
+        y: Math.min(tip.y + nextDirection.y * length, state.height - 260),
+      };
+      branchPath += ` L ${next.x} ${next.y}`;
+      tip = next;
+      direction = nextDirection;
+    }
+
+    parentBranch.branchD += ` ${branchPath}`;
+    parentBranch.branchOuterPath.setAttribute("d", parentBranch.branchD);
+    parentBranch.branchInnerPath.setAttribute("d", parentBranch.branchD);
+    parentBranch.branchOuterPath.setAttribute("stroke-width", (1.2 * (1 - progress * 0.25)).toFixed(2));
+    parentBranch.branchInnerPath.setAttribute("stroke-width", (0.45 * (1 - progress * 0.2)).toFixed(2));
+  }
+
+  createPulsePath(branch) {
+    const d = branch.points
+      .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`)
+      .join(" ");
+
+    branch.pulsePath.setAttribute("d", d);
+
+    const length = branch.pulsePath.getTotalLength();
+
+    branch.pulsePath.style.strokeDasharray = `28 ${length}`;
+    branch.pulsePath.style.strokeDashoffset = `${length}`;
+    branch.pulsePath.style.setProperty("--pulse-length", `${length}`);
+  }
+
+  highlight(moduleId, onArrive) {
+    const index = Number(moduleId);
+    const branch = this.branches[index];
+
+    if (!branch) {
+      return;
+    }
+
+    this.activeIndex = index;
+    this.pendingConsole = onArrive || null;
+    this.layer.classList.add("has-highlight");
+
+    this.branches.forEach((item) => {
+      if (item.index !== index) {
+        item.pulseCallback = null;
+      }
+
+      item.group.classList.toggle("is-active", item.index === index);
+      item.group.classList.remove("pulse-arrived");
+    });
+
+    if (!branch.complete) {
+      branch.pulseCallback = onArrive || null;
+      return;
+    }
+
+    branch.pulsePath.classList.remove("is-running");
+    branch.pulsePath.getBoundingClientRect();
+    branch.pulsePath.classList.add("is-running");
+
+    window.setTimeout(() => {
+      if (this.activeIndex !== index) {
+        return;
+      }
+
+      branch.group.classList.add("pulse-arrived");
+
+      if (this.pendingConsole) {
+        this.pendingConsole();
+        this.pendingConsole = null;
+      }
+    }, 980);
+  }
+
+  clear() {
+    this.isGrowing = false;
+    this.activeIndex = null;
+    this.pendingConsole = null;
+
+    if (this.frame) {
+      cancelAnimationFrame(this.frame);
+      this.frame = null;
+    }
+
+    if (this.clearTimer) {
+      clearTimeout(this.clearTimer);
+    }
+
+    this.layer.classList.remove("is-visible", "has-highlight");
+    this.clearTimer = window.setTimeout(() => {
+      this.layer.style.display = "none";
+      this.layer.replaceChildren();
+      this.branches = [];
+      this.clearTimer = null;
+    }, 300);
+  }
+
+  reportMetrics() {
+    console.debug("vascular generation ms", Math.round(performance.now() - this.generatedAt));
+    console.debug("veins count", this.branches.length);
+    console.debug("branch count", this.branchCount);
+    console.debug("generated SVG path count", this.generatedPathCount);
+  }
+
+  resize() {
+    if (!this.branches.length) {
+      return;
+    }
+
+    const shouldGrow = this.isGrowing || isMode(MODES.OPEN);
+    const activeIndex = this.activeIndex;
+
+    this.generate();
+
+    if (shouldGrow) {
+      this.grow();
+    }
+
+    if (activeIndex !== null) {
+      this.highlight(activeIndex);
+    }
+  }
+}
+
+const veinNetwork = new VeinNetwork(vascularLayer, getOpenDropCenter, getModuleCenters);
 
 function syncButtonLabel() {
   const isPulled = state.progress > 0.04 || !isMode(MODES.IDLE, MODES.SNAP_BACK);
@@ -299,12 +707,14 @@ function showConsole(index) {
 
 function selectConsoleModule(index) {
   if (!isMode(MODES.OPEN) || state.console.activeIndex === index) {
+    veinNetwork.highlight(index, () => showConsole(index));
     return;
   }
 
   state.console.activeIndex = index;
   state.impulse = 9;
-  showConsole(index);
+  hideConsole();
+  veinNetwork.highlight(index, () => showConsole(index));
 }
 
 function hideConsole() {
@@ -537,7 +947,22 @@ function resize() {
   state.button.h = 92;
   syncHitTarget();
 
+  if (isMode(MODES.OPEN)) {
+    veinNetwork.resize();
+  }
+
   render(performance.now());
+}
+
+function handleResize() {
+  if (resizeTimer) {
+    window.clearTimeout(resizeTimer);
+  }
+
+  resizeTimer = window.setTimeout(() => {
+    resizeTimer = null;
+    resize();
+  }, RESIZE_DEBOUNCE_MS);
 }
 
 function render(now) {
@@ -912,7 +1337,7 @@ hitButton.addEventListener("pointerup", handlePointerUp);
 hitButton.addEventListener("pointercancel", handlePointerCancel);
 menuOverlay.addEventListener("click", handleOverlayClick);
 window.addEventListener("keydown", handleKeyDown);
-window.addEventListener("resize", resize);
+window.addEventListener("resize", handleResize);
 
 itemGroups.forEach((group) => {
   group.addEventListener("pointerenter", handleItemPointerEnter);

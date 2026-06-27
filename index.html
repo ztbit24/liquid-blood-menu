@@ -4,23 +4,45 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <title>Vércsepp menü</title>
+    <title>Organic Bio Interface Concept</title>
 
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Oxanium:wght@500;700;800&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="style.css" />
   </head>
 
   <body>
-    <main class="demo-stage" aria-label="Vércsepp menü demo">
+    <main class="demo-stage" aria-label="Organic bio interface demo">
       <button
         id="menuOverlay"
         class="menu-overlay"
         type="button"
-        aria-label="Menü bezárása"
+        aria-label="Interface bezárása"
         hidden
       ></button>
 
+      <section id="bioConsole" class="bio-console" aria-live="polite" hidden>
+        <div class="console-frame">
+          <div class="console-header">
+            <span class="console-kicker">BIO-LAB INTERFACE</span>
+            <span id="consoleModule" class="console-module">ORGANISM</span>
+          </div>
+
+          <pre id="consoleOutput" class="console-output"></pre>
+        </div>
+      </section>
+
+      <div id="dragHint" class="drag-hint" aria-hidden="true">
+        <span class="drag-hint__text">Drag down to activate</span>
+        <span class="drag-hint__arrow"></span>
+      </div>
+
       <!--
-        A teljes menü SVG-ben rajzolódik, hogy a gooey filter és a
+        A teljes interfész SVG-ben rajzolódik, hogy a gooey filter és a
         folyékony alakzatok egy rétegen belül tudjanak összeolvadni.
       -->
       <svg id="menuSvg" class="blood-menu" aria-hidden="true">
@@ -55,33 +77,33 @@
           <path id="dropShape" class="blood-shape blood-drop" />
           <path id="bridgeShape" class="blood-shape blood-bridge" />
 
-          <!-- Menüelemek, amelyek a fő gombból válnak szét. -->
+          <!-- Bio-szenzor modulok, amelyek a fő biomasszából válnak szét. -->
           <g id="itemsGroup">
             <g class="menu-item" data-index="0">
               <path class="blood-shape item-shape" />
-              <text class="item-label">Élet</text>
+              <text class="item-label">ORGANISM</text>
             </g>
 
             <g class="menu-item" data-index="1">
               <path class="blood-shape item-shape" />
-              <text class="item-label">Remény</text>
+              <text class="item-label">MORPHOLOGY</text>
             </g>
 
             <g class="menu-item" data-index="2">
               <path class="blood-shape item-shape" />
-              <text class="item-label">Erő</text>
+              <text class="item-label">NEURAL LINK</text>
             </g>
 
             <g class="menu-item" data-index="3">
               <path class="blood-shape item-shape" />
-              <text class="item-label">Segítség</text>
+              <text class="item-label">DIAGNOSTICS</text>
             </g>
           </g>
 
           <path id="buttonShape" class="blood-shape main-shape" />
         </g>
 
-        <text id="buttonText" class="button-label">töröld le</text>
+        <text id="buttonText" class="button-label">BIO INTERFACE</text>
       </svg>
 
       <!-- Láthatatlan, natív fókuszt és pointer húzást kezelő gomb. -->
@@ -89,9 +111,9 @@
         id="hitButton"
         class="hit-button"
         type="button"
-        aria-label="Vércsepp menü lehúzása"
+        aria-label="Bio interface lehúzása"
       >
-        töröld le
+        BIO INTERFACE
       </button>
     </main>
 

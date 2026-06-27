@@ -1,6 +1,10 @@
 // 1. DOM elemek
 const svg = document.querySelector("#menuSvg");
 const menuOverlay = document.querySelector("#menuOverlay");
+const bioConsole = document.querySelector("#bioConsole");
+const consoleModule = document.querySelector("#consoleModule");
+const consoleOutput = document.querySelector("#consoleOutput");
+const dragHint = document.querySelector("#dragHint");
 const hitButton = document.querySelector("#hitButton");
 const buttonShape = document.querySelector("#buttonShape");
 const buttonText = document.querySelector("#buttonText");
@@ -20,8 +24,8 @@ const MODES = {
 
 const DRAG_OPEN_THRESHOLD = 96;
 const DRAG_MAX_DISTANCE = 190;
-const CLOSED_LABEL = "töröld le";
-const DRAGGED_LABEL = "addj vért";
+const CLOSED_LABEL = "BIO INTERFACE";
+const DRAGGED_LABEL = "INITIALIZE";
 
 const state = {
   mode: MODES.IDLE,
@@ -47,17 +51,93 @@ const state = {
     hoverIndex: null,
     activeIndex: null,
   },
+  console: {
+    activeIndex: 0,
+    visible: false,
+    text: "",
+    targetText: "",
+    typeFrame: null,
+    typeStarted: 0,
+  },
   motion: {
     dropSway: 0,
+  },
+  hint: {
+    visible: false,
+    delayTimer: null,
   },
   animationFrame: null,
 };
 
 const items = [
-  { label: "Élet", dx: -128, dy: 138, w: 126, h: 58 },
-  { label: "Remény", dx: 128, dy: 138, w: 144, h: 58 },
-  { label: "Erő", dx: -112, dy: 218, w: 116, h: 56 },
-  { label: "Segítség", dx: 124, dy: 218, w: 154, h: 56 },
+  {
+    label: "ORGANISM",
+    dx: -132,
+    dy: 138,
+    w: 146,
+    h: 58,
+    console: [
+      "> STATUS",
+      "> Living interface detected.",
+      "",
+      "> CELL ACTIVITY",
+      "> 97.8%",
+      "",
+      "> RESPONSE",
+      "> Neural tissue synchronized.",
+    ].join("\n"),
+  },
+  {
+    label: "MORPHOLOGY",
+    dx: 134,
+    dy: 138,
+    w: 166,
+    h: 58,
+    console: [
+      "> SURFACE TENSION",
+      "> Dynamic",
+      "",
+      "> METABALLS",
+      "> Active",
+      "",
+      "> GOO FILTER",
+      "> Enabled",
+    ].join("\n"),
+  },
+  {
+    label: "NEURAL LINK",
+    dx: -124,
+    dy: 222,
+    w: 164,
+    h: 58,
+    console: [
+      "> POINTER TRACKING",
+      "> Connected",
+      "",
+      "> INPUT LATENCY",
+      "> Stable",
+      "",
+      "> SYNCHRONIZATION",
+      "> Complete",
+    ].join("\n"),
+  },
+  {
+    label: "DIAGNOSTICS",
+    dx: 132,
+    dy: 222,
+    w: 170,
+    h: 58,
+    console: [
+      "> FPS TARGET",
+      "> 60",
+      "",
+      "> RENDER MODE",
+      "> SVG",
+      "",
+      "> SYSTEM STATE",
+      "> Ready",
+    ].join("\n"),
+  },
 ];
 
 // 3. Segédfüggvények
@@ -81,11 +161,20 @@ function setMode(mode) {
     state.reaction.activeIndex = null;
   }
 
+  if (mode === MODES.OPEN) {
+    showConsole(state.console.activeIndex);
+  }
+
+  if (mode === MODES.CLOSING || mode === MODES.IDLE) {
+    hideConsole();
+  }
+
   hitButton.setAttribute(
     "aria-expanded",
     String(isMode(MODES.DETACHING, MODES.OPEN))
   );
   syncOverlay();
+  syncDragHint();
 }
 
 function resetPointer() {
@@ -114,6 +203,8 @@ function syncHitTarget() {
   hitButton.style.top = `${state.button.cy}px`;
   hitButton.style.width = `${state.button.w}px`;
   hitButton.style.height = `${state.button.h}px`;
+  dragHint.style.left = `${state.button.cx}px`;
+  dragHint.style.top = `${state.button.cy + state.button.h * 0.72}px`;
 }
 
 function syncButtonLabel() {
@@ -124,7 +215,7 @@ function syncButtonLabel() {
   hitButton.textContent = label;
   hitButton.setAttribute(
     "aria-label",
-    isPulled ? "Vércsepp menü nyitása" : "Vércsepp menü lehúzása"
+    isPulled ? "Bio interface inicializálása" : "Bio interface lehúzása"
   );
 }
 
@@ -145,7 +236,133 @@ function itemReaction(index) {
     return 1;
   }
 
-  return state.reaction.hoverIndex === index ? 0.62 : 0;
+  if (state.reaction.hoverIndex === index) {
+    return 0.72;
+  }
+
+  return state.console.activeIndex === index ? 0.46 : 0;
+}
+
+function stopTyping() {
+  if (state.console.typeFrame) {
+    cancelAnimationFrame(state.console.typeFrame);
+    state.console.typeFrame = null;
+  }
+}
+
+function typeConsoleText(text) {
+  stopTyping();
+
+  state.console.text = "";
+  state.console.targetText = text;
+  state.console.typeStarted = performance.now();
+  consoleOutput.textContent = "";
+
+  function tick(now) {
+    const elapsed = now - state.console.typeStarted;
+    const nextLength = clamp(Math.floor(elapsed / 13), 0, text.length);
+
+    state.console.text = text.slice(0, nextLength);
+    consoleOutput.textContent = state.console.text;
+
+    if (nextLength < text.length && state.console.visible) {
+      state.console.typeFrame = requestAnimationFrame(tick);
+      return;
+    }
+
+    state.console.typeFrame = null;
+  }
+
+  state.console.typeFrame = requestAnimationFrame(tick);
+}
+
+function showConsole(index) {
+  const item = items[index];
+
+  if (!item) {
+    return;
+  }
+
+  state.console.activeIndex = index;
+  state.console.visible = true;
+  bioConsole.hidden = false;
+  consoleModule.textContent = item.label;
+
+  requestAnimationFrame(() => {
+    bioConsole.classList.add("is-visible");
+  });
+
+  if (state.console.targetText !== item.console || !state.console.text) {
+    typeConsoleText(item.console);
+  }
+}
+
+function selectConsoleModule(index) {
+  if (!isMode(MODES.OPEN) || state.console.activeIndex === index) {
+    return;
+  }
+
+  state.console.activeIndex = index;
+  state.impulse = 9;
+  showConsole(index);
+}
+
+function hideConsole() {
+  state.console.visible = false;
+  bioConsole.classList.remove("is-visible");
+  stopTyping();
+
+  window.setTimeout(() => {
+    if (!state.console.visible) {
+      bioConsole.hidden = true;
+      consoleOutput.textContent = "";
+      state.console.text = "";
+      state.console.targetText = "";
+    }
+  }, 240);
+}
+
+function clearHintDelay() {
+  if (state.hint.delayTimer) {
+    window.clearTimeout(state.hint.delayTimer);
+    state.hint.delayTimer = null;
+  }
+}
+
+function showDragHint() {
+  if (!isMode(MODES.IDLE)) {
+    return;
+  }
+
+  state.hint.visible = true;
+  dragHint.classList.add("is-visible");
+}
+
+function hideDragHint() {
+  clearHintDelay();
+  state.hint.visible = false;
+  dragHint.classList.remove("is-visible");
+}
+
+function scheduleDragHint() {
+  clearHintDelay();
+
+  state.hint.delayTimer = window.setTimeout(() => {
+    state.hint.delayTimer = null;
+    showDragHint();
+  }, 1000);
+}
+
+function syncDragHint() {
+  if (isMode(MODES.IDLE) && state.progress <= 0.01) {
+    if (!state.hint.visible && !state.hint.delayTimer) {
+      scheduleDragHint();
+    }
+
+    return;
+  }
+
+  hideDragHint();
 }
 
 function syncOverlay() {
@@ -415,7 +632,7 @@ function render(now) {
 
   itemGroups.forEach((group, index) => {
     const item = items[index];
-    const local = clamp((splitP - index * 0.06) / 0.82, 0, 1);
+    const local = clamp((splitP - index * 0.09) / 0.76, 0, 1);
     const eased = easeOutCubic(local);
     const reaction = itemReaction(index);
     const breath = isMode(MODES.OPEN)
@@ -551,6 +768,7 @@ function handlePointerDown(event) {
   }
 
   event.preventDefault();
+  hideDragHint();
 
   setMode(MODES.DRAGGING);
   state.pointer.id = event.pointerId;
@@ -640,7 +858,10 @@ function handleItemPointerEnter(event) {
     return;
   }
 
-  state.reaction.hoverIndex = Number(event.currentTarget.dataset.index);
+  const index = Number(event.currentTarget.dataset.index);
+
+  state.reaction.hoverIndex = index;
+  selectConsoleModule(index);
 }
 
 function handleItemPointerLeave(event) {
@@ -665,8 +886,11 @@ function handleItemPointerDown(event) {
   }
 
   event.preventDefault();
-  state.reaction.activeIndex = Number(event.currentTarget.dataset.index);
+  const index = Number(event.currentTarget.dataset.index);
+
+  state.reaction.activeIndex = index;
   state.impulse = 8;
+  selectConsoleModule(index);
 }
 
 function handleItemPointerUp(event) {
@@ -700,4 +924,5 @@ itemGroups.forEach((group) => {
 
 hitButton.setAttribute("aria-expanded", "false");
 resize();
+scheduleDragHint();
 requestAnimationFrame(idle);

@@ -1,110 +1,61 @@
-# 🩸 Liquid Blood Menu
+# Organic Bio Interface Concept
 
-An experimental UI concept where a dark, organic blood blob transforms into an interactive navigation menu.
+Experimental organic sci-fi interface demo built with HTML, CSS, SVG filters and vanilla JavaScript.
 
-Instead of opening a traditional dropdown, the interface behaves like a living material. Pull the blob down, watch a blood drop stretch, detach, and morph into a floating menu.
+The interaction keeps the original gooey motion model: a main living biomass is pulled downward, a drop stretches and detaches, then four smaller organic sensor modules form from the material.
 
-> This project is an exploration of fluid user interfaces built with nothing more than HTML, CSS, SVG and vanilla JavaScript.
+## Features
 
----
+- Organic biomass drag interaction
+- Gooey SVG metaball filter
+- Stable state machine interaction
+- Four bio-sensor modules
+- Dynamic console panel with typed diagnostic text
+- Hover and tap reactions on active modules
+- Background blur overlay
+- Escape key and background click close
+- Mobile touch support
 
-## ✨ Features
+## Modules
 
-* Organic blood blob interaction
-* Gooey SVG metaball effect
-* Elastic drag animation
-* Dynamic bridge between blob and drop
-* Blood drop detachment
-* Morphing floating menu
-* Mobile touch support
-* State machine driven interaction
-* Smooth 60 FPS animations
-* Background blur overlay
-* Escape key and outside-click close
+- ORGANISM
+- MORPHOLOGY
+- NEURAL LINK
+- DIAGNOSTICS
 
----
+## Technologies
 
-## 🛠 Technologies
+- HTML5
+- CSS3
+- Vanilla JavaScript
+- SVG filters
+- Pointer Events API
+- Google Fonts: Oxanium and JetBrains Mono
 
-* HTML5
-* CSS3
-* Vanilla JavaScript
-* SVG Filters
+No frameworks, no dependencies, no build process.
 
-  * `feGaussianBlur`
-  * `feColorMatrix`
-* Pointer Events API
+## Run
 
-No frameworks.
-No dependencies.
-No build process.
+Open `index.html` directly in a browser, or serve the folder locally:
 
----
+```bash
+python3 -m http.server 8000
+```
 
-## 🎮 Interaction
+Then open:
 
-1. Touch or click the blood blob at the top of the screen.
-2. Drag downward.
-3. If the drag distance is too short, the blob snaps back.
-4. Drag past the threshold and the blood drop stretches from the blob.
-5. The bridge narrows until the drop detaches.
-6. The detached drop morphs into a floating navigation menu.
-7. Click outside the menu or press **Esc** to close it.
+```text
+http://localhost:8000
+```
 
----
+## Interaction
 
-## 📱 Mobile Support
+1. Pull the top biomass downward.
+2. Release before the threshold to snap back.
+3. Pull past the threshold to detach the drop and open the bio interface.
+4. Hover or tap a sensor module to switch console output.
+5. Click the background or press `Esc` to close.
 
-Designed primarily for touch devices.
+## Goal
 
-Optimizations include:
-
-* Pointer Events
-* Disabled tap highlight
-* Disabled text selection
-* Controlled touch actions
-* Responsive layout
-
----
-
-## 🚀 Live Demo
-
-https://ztbit24.github.io/liquid-blood-menu/
-
----
-
-## 📷 Preview
-
-![Liquid Blood Menu](images/screenshot.png)
----
-
-## 🎯 Project Goals
-
-This is not intended to become a production navigation component.
-
-The purpose of the project is to experiment with:
-
-* fluid interfaces
-* organic interaction design
-* procedural animation
-* SVG gooey effects
-* unconventional UI concepts
-
----
-
-## 💡 Future Ideas
-
-* Physics-based metaballs
-* Multi-drop interaction
-* Dynamic menu generation
-* Sound effects
-* Haptic feedback
-* Theme customization
-* WebGL version
-* Three.js implementation
-
----
-
-## 📄 License
-
-MIT License
+The goal is a dark, elegant biotech laboratory UI concept: organic, responsive, and experimental without using a framework or build system.

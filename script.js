@@ -20,6 +20,8 @@ const MODES = {
 
 const DRAG_OPEN_THRESHOLD = 96;
 const DRAG_MAX_DISTANCE = 190;
+const CLOSED_LABEL = "töröld le";
+const DRAGGED_LABEL = "addj vért";
 
 const state = {
   mode: MODES.IDLE,
@@ -40,6 +42,13 @@ const state = {
     startY: 0,
     currentX: 0,
     currentY: 0,
+  },
+  reaction: {
+    hoverIndex: null,
+    activeIndex: null,
+  },
+  motion: {
+    dropSway: 0,
   },
   animationFrame: null,
 };
@@ -66,6 +75,12 @@ function isMode(...modes) {
 
 function setMode(mode) {
   state.mode = mode;
+
+  if (mode !== MODES.OPEN) {
+    state.reaction.hoverIndex = null;
+    state.reaction.activeIndex = null;
+  }
+
   hitButton.setAttribute(
     "aria-expanded",
     String(isMode(MODES.DETACHING, MODES.OPEN))
@@ -88,6 +103,49 @@ function dragDistanceFromEvent(event) {
 
 function progressFromDrag(distance) {
   return clamp(distance / DRAG_MAX_DISTANCE, 0, 0.72);
+}
+
+function topButtonCenterY() {
+  return Math.min(Math.max(92, state.height * 0.16), 132);
+}
+
+function syncHitTarget() {
+  hitButton.style.left = `${state.button.cx}px`;
+  hitButton.style.top = `${state.button.cy}px`;
+  hitButton.style.width = `${state.button.w}px`;
+  hitButton.style.height = `${state.button.h}px`;
+}
+
+function syncButtonLabel() {
+  const isPulled = state.progress > 0.04 || !isMode(MODES.IDLE, MODES.SNAP_BACK);
+  const label = isPulled ? DRAGGED_LABEL : CLOSED_LABEL;
+
+  buttonText.textContent = label;
+  hitButton.textContent = label;
+  hitButton.setAttribute(
+    "aria-label",
+    isPulled ? "Vércsepp menü nyitása" : "Vércsepp menü lehúzása"
+  );
+}
+
+function pointerDragX() {
+  if (isMode(MODES.DRAGGING)) {
+    return state.pointer.currentX - state.pointer.startX;
+  }
+
+  return state.motion.dropSway;
+}
+
+function itemReaction(index) {
+  if (!isMode(MODES.OPEN)) {
+    return 0;
+  }
+
+  if (state.reaction.activeIndex === index) {
+    return 1;
+  }
+
+  return state.reaction.hoverIndex === index ? 0.62 : 0;
 }
 
 function syncOverlay() {
@@ -257,9 +315,10 @@ function resize() {
   svg.setAttribute("viewBox", `0 0 ${state.width} ${state.height}`);
 
   state.button.cx = state.width / 2;
-  state.button.cy = state.height / 2;
+  state.button.cy = topButtonCenterY();
   state.button.w = Math.min(276, state.width * 0.72);
   state.button.h = 92;
+  syncHitTarget();
 
   render(performance.now());
 }
@@ -268,22 +327,30 @@ function render(now) {
   const phase = (now - state.startTime) / 180;
   const p = state.progress;
   const isTransitioning = isMode(MODES.SNAP_BACK, MODES.DETACHING, MODES.CLOSING);
+  const idleBreath = 1 + Math.sin(phase * 0.52) * 0.018;
+  const idleLift = Math.sin(phase * 0.38) * 1.2 * (1 - p);
+  const dragX = pointerDragX();
+  const dropSway =
+    clamp(dragX * 0.18, -18, 18) * (1 - p * 0.35) +
+    Math.sin(phase * 0.9 + p * 2.4) * (4 + p * 8);
   const buttonPulse = isTransitioning
     ? state.impulse
     : 2.4 + Math.sin(phase * 0.7) * 1.2;
-  const buttonAmp = buttonPulse * (1 - p * 0.45);
+  const buttonAmp =
+    buttonPulse * (1 - p * 0.45) +
+    Math.sin(phase * 1.35) * 0.7 * (1 - p);
   const dropP = clamp(p / 0.46, 0, 1);
   const splitP = clamp((p - 0.58) / 0.42, 0, 1);
   const cx = state.button.cx;
-  const cy = state.button.cy;
+  const cy = state.button.cy + idleLift;
 
   buttonShape.setAttribute(
     "d",
     wavySuperellipse({
       cx,
       cy,
-      w: state.button.w - splitP * 18,
-      h: state.button.h - splitP * 8,
+      w: (state.button.w - splitP * 18) * idleBreath,
+      h: (state.button.h - splitP * 8) * (2 - idleBreath),
       amp: buttonAmp,
       phase,
       seed: 0.4,
@@ -294,20 +361,40 @@ function render(now) {
   buttonText.setAttribute("x", cx);
   buttonText.setAttribute("y", cy + 1);
   buttonText.style.opacity = String(1 - splitP * 0.82);
+  syncButtonLabel();
 
   const dropSize = lerp(4, 88, dropP) * (1 - splitP * 0.22);
-  const dropY = cy + state.button.h / 2 + lerp(2, 92, dropP) - splitP * 18;
+  const dropX = cx + dropSway * dropP * (1 - splitP * 0.42);
+  const dropY =
+    cy +
+    state.button.h / 2 +
+    lerp(2, 92, dropP) -
+    splitP * 18 +
+    Math.sin(phase * 1.08) * 2.2 * dropP;
   const buttonBottom = cy + (state.button.h - splitP * 8) / 2 - 2;
   const dropTop = dropY - dropSize * 0.54;
   const bridgeP = clamp((p - 0.08) / 0.55, 0, 1);
   const tearP = clamp((p - 0.6) / 0.18, 0, 1);
-  const topWidth = lerp(state.button.w * 0.42, 42, bridgeP) * (1 - tearP * 0.72);
-  const bottomWidth = lerp(12, dropSize * 0.55, dropP) * (1 - tearP * 0.84);
+  const bridgeWave = Math.sin(phase * 1.65 + dropP * 2) * 3.5 * bridgeP;
+  const topWidth =
+    lerp(state.button.w * 0.42, 42, bridgeP) *
+    (1 - tearP * 0.72) *
+    (1 + Math.sin(phase * 1.12) * 0.035 * bridgeP);
+  const bottomWidth =
+    lerp(12, dropSize * 0.55, dropP) *
+    (1 - tearP * 0.84) *
+    (1 + Math.cos(phase * 1.28) * 0.045 * bridgeP);
 
   dropShape.setAttribute(
     "d",
     dropSize > 2
-      ? dropPath(cx, dropY, dropSize, 4 + state.impulse * 0.16, phase * 1.2)
+      ? dropPath(
+          dropX,
+          dropY,
+          dropSize,
+          4 + state.impulse * 0.16 + Math.abs(dropSway) * 0.08,
+          phase * 1.2
+        )
       : ""
   );
   dropShape.style.opacity = String(clamp(dropP * 1.4 - splitP * 0.7, 0, 1));
@@ -315,13 +402,13 @@ function render(now) {
   bridgeShape.setAttribute(
     "d",
     bridgePath(
-      cx,
+      cx + bridgeWave + dropSway * 0.12 * bridgeP,
       buttonBottom,
       dropTop + 6,
       topWidth,
       bottomWidth,
-      5 + state.impulse * 0.06,
-      phase
+      5 + state.impulse * 0.06 + Math.abs(dragX) * 0.018,
+      phase + dragX * 0.012
     )
   );
   bridgeShape.style.opacity = String(clamp(bridgeP * 1.3 - tearP * 1.25, 0, 1));
@@ -330,13 +417,27 @@ function render(now) {
     const item = items[index];
     const local = clamp((splitP - index * 0.06) / 0.82, 0, 1);
     const eased = easeOutCubic(local);
-    const itemCx = lerp(cx, cx + item.dx, eased);
-    const itemCy = lerp(dropY, cy + item.dy, eased);
-    const itemW = lerp(42, item.w, eased);
-    const itemH = lerp(34, item.h, eased);
-    const amp = (1 - eased) * 14 + Math.sin(phase + index) * 1.6;
+    const reaction = itemReaction(index);
+    const breath = isMode(MODES.OPEN)
+      ? Math.sin(phase * 0.44 + index * 1.6) * 0.018
+      : 0;
+    const itemCx =
+      lerp(dropX, cx + item.dx, eased) +
+      Math.sin(phase * 0.55 + index) * 1.2 * eased;
+    const itemCy =
+      lerp(dropY, cy + item.dy, eased) +
+      Math.cos(phase * 0.5 + index * 0.8) * 1.1 * eased;
+    const itemW = lerp(42, item.w, eased) * (1 + breath + reaction * 0.055);
+    const itemH = lerp(34, item.h, eased) * (1 - breath * 0.8 + reaction * 0.045);
+    const amp =
+      (1 - eased) * 14 +
+      Math.sin(phase + index) * 1.6 +
+      Math.sin(phase * 0.7 + index * 2.1) * 0.9 * eased +
+      reaction * 5.2;
     const shape = group.querySelector(".item-shape");
     const text = group.querySelector(".item-label");
+
+    group.classList.toggle("is-reacting", reaction > 0);
 
     shape.setAttribute(
       "d",
@@ -377,6 +478,7 @@ function animateProgress({ mode, from, to, duration, easing, doneMode }) {
 
     state.progress = lerp(from, to, eased);
     state.impulse *= 0.92;
+    state.motion.dropSway *= 0.94;
 
     render(now);
 
@@ -474,6 +576,7 @@ function handlePointerMove(event) {
   state.pointer.currentY = event.clientY;
   state.progress = progressFromDrag(dragDistanceFromEvent(event));
   state.impulse = 8 + state.progress * 16;
+  state.motion.dropSway = clamp(pointerDragX(), -80, 80);
 
   render(performance.now());
 }
@@ -486,6 +589,7 @@ function handlePointerUp(event) {
   event.preventDefault();
 
   const distance = dragDistanceFromEvent(event);
+  state.motion.dropSway = clamp(event.clientX - state.pointer.startX, -80, 80);
 
   if (hitButton.hasPointerCapture(event.pointerId)) {
     hitButton.releasePointerCapture(event.pointerId);
@@ -531,6 +635,53 @@ function handleKeyDown(event) {
   closeMenu();
 }
 
+function handleItemPointerEnter(event) {
+  if (!isMode(MODES.OPEN)) {
+    return;
+  }
+
+  state.reaction.hoverIndex = Number(event.currentTarget.dataset.index);
+}
+
+function handleItemPointerLeave(event) {
+  if (!isMode(MODES.OPEN)) {
+    return;
+  }
+
+  const index = Number(event.currentTarget.dataset.index);
+
+  if (state.reaction.hoverIndex === index) {
+    state.reaction.hoverIndex = null;
+  }
+
+  if (state.reaction.activeIndex === index) {
+    state.reaction.activeIndex = null;
+  }
+}
+
+function handleItemPointerDown(event) {
+  if (!isMode(MODES.OPEN)) {
+    return;
+  }
+
+  event.preventDefault();
+  state.reaction.activeIndex = Number(event.currentTarget.dataset.index);
+  state.impulse = 8;
+}
+
+function handleItemPointerUp(event) {
+  if (!isMode(MODES.OPEN)) {
+    return;
+  }
+
+  event.preventDefault();
+  state.reaction.activeIndex = null;
+}
+
+function handleItemPointerCancel() {
+  state.reaction.activeIndex = null;
+}
+
 hitButton.addEventListener("pointerdown", handlePointerDown);
 hitButton.addEventListener("pointermove", handlePointerMove);
 hitButton.addEventListener("pointerup", handlePointerUp);
@@ -538,6 +689,14 @@ hitButton.addEventListener("pointercancel", handlePointerCancel);
 menuOverlay.addEventListener("click", handleOverlayClick);
 window.addEventListener("keydown", handleKeyDown);
 window.addEventListener("resize", resize);
+
+itemGroups.forEach((group) => {
+  group.addEventListener("pointerenter", handleItemPointerEnter);
+  group.addEventListener("pointerleave", handleItemPointerLeave);
+  group.addEventListener("pointerdown", handleItemPointerDown);
+  group.addEventListener("pointerup", handleItemPointerUp);
+  group.addEventListener("pointercancel", handleItemPointerCancel);
+});
 
 hitButton.setAttribute("aria-expanded", "false");
 resize();

@@ -140,13 +140,30 @@ body {
 /* Menüelemek és feliratok. */
 .menu-item {
   opacity: 0;
+  cursor: pointer;
+  pointer-events: visiblePainted;
+  transition: filter 160ms ease;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
   touch-action: none;
 }
 
+.menu-item.is-reacting {
+  filter:
+    drop-shadow(0 0 10px rgba(255, 65, 88, 0.42))
+    drop-shadow(0 0 22px rgba(150, 0, 22, 0.3));
+}
+
 .item-shape {
   fill: #ce0e2c;
+  transition:
+    fill 160ms ease,
+    stroke 160ms ease;
+}
+
+.menu-item.is-reacting .item-shape {
+  fill: #e61536;
+  stroke: #ff9baa;
 }
 
 .button-label,
@@ -173,7 +190,7 @@ body {
 .hit-button {
   position: fixed;
   left: 50%;
-  top: 50%;
+  top: min(max(92px, 16svh), 132px);
   z-index: 3;
   width: min(270px, 72vw);
   height: 92px;
